@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/config.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/Controls.tsx","./src/components/Lobby.tsx","./src/components/VideoCall.tsx","./src/hooks/useCall.ts","./src/lib/iceConfig.ts","./src/lib/protocol.ts","./src/signaling/SignalingClient.ts","./src/webrtc/PeerConnection.ts","./vite.config.ts"],"version":"5.9.3"}

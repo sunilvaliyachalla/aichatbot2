@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allows cleartext (http) traffic for local development against the signaling
+  server (emulator host 10.0.2.2 and typical LAN ranges). In production use
+  HTTPS/WSS and remove these cleartext exceptions.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+    </domain-config>
+    <!-- Fallback for arbitrary LAN IPs during development. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

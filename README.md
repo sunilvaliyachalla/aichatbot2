@@ -14,6 +14,10 @@ signaling: room management, presence, and relaying SDP offers/answers and ICE
 candidates. It never touches audio/video. STUN is used by default; TURN is
 optional and configurable for networks where direct P2P is blocked.
 
+> 📐 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full system design, and
+> [`AI_ROADMAP.md`](./AI_ROADMAP.md) for AI features planned on a Python FastAPI
+> backend + Android.
+
 ---
 
 ## Architecture

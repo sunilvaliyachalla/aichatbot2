@@ -1,0 +1,13 @@
+# Aggregated ignores; each sub-project also has its own .gitignore.
+node_modules/
+dist/
+build/
+.env
+*.log
+.DS_Store
+
+# Android
+android/.gradle/
+android/local.properties
+android/.idea/
+android/captures/

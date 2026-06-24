@@ -16,9 +16,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,7 +51,11 @@ fun CallScreen(
     onCycleLanguage: () -> Unit = {},
     onSummarize: () -> Unit = {},
     onDismissSummary: () -> Unit = {},
+    onAsk: (String) -> Unit = {},
+    onDismissAnswer: () -> Unit = {},
 ) {
+    var showAsk by remember { mutableStateOf(false) }
+    var question by remember { mutableStateOf("") }
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -127,6 +136,13 @@ fun CallScreen(
                 ) {
                     Text(if (state.summarizing) "Summarizing…" else "Summarize")
                 }
+                OutlinedButton(
+                    onClick = { showAsk = true },
+                    enabled = !state.asking,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (state.asking) "Asking…" else "Ask")
+                }
             }
         }
 
@@ -146,6 +162,44 @@ fun CallScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             ) { Text("End") }
         }
+    }
+
+    // Ask-a-question input dialog.
+    if (showAsk) {
+        AlertDialog(
+            onDismissRequest = { showAsk = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onAsk(question)
+                        question = ""
+                        showAsk = false
+                    },
+                    enabled = question.isNotBlank(),
+                ) { Text("Ask") }
+            },
+            dismissButton = { TextButton(onClick = { showAsk = false }) { Text("Cancel") } },
+            title = { Text("Ask about this call") },
+            text = {
+                OutlinedTextField(
+                    value = question,
+                    onValueChange = { question = it },
+                    label = { Text("Your question") },
+                    singleLine = true,
+                )
+            },
+        )
+    }
+
+    // Answer dialog.
+    val answer = state.answer
+    if (answer != null) {
+        AlertDialog(
+            onDismissRequest = onDismissAnswer,
+            confirmButton = { TextButton(onClick = onDismissAnswer) { Text("Close") } },
+            title = { Text("Answer") },
+            text = { Text(answer) },
+        )
     }
 
     // Summary result dialog.

@@ -98,3 +98,71 @@ async def translate(text: str, target_lang: str) -> str:
         ]
     )
     return content.strip()
+
+
+async def answer_question(transcript: str, question: str) -> str:
+    """Answer a question grounded in the call transcript (context-stuffed)."""
+    system = (
+        "You answer questions about a meeting using ONLY the provided transcript. "
+        "If the answer isn't in the transcript, say you don't know. Be concise."
+    )
+    content = await chat(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"Transcript:\n{transcript}\n\nQuestion: {question}"},
+        ]
+    )
+    return content.strip()
+
+
+_CHAPTERS_SYSTEM = (
+    "You split a meeting transcript into topical chapters. Respond ONLY with JSON "
+    'of the form {"chapters": [{"title": string, "summary": string}]}. No prose.'
+)
+
+
+async def chapters(transcript: str) -> list[dict]:
+    """Break a transcript into topical chapters ``[{title, summary}]``."""
+    content = await chat(
+        [
+            {"role": "system", "content": _CHAPTERS_SYSTEM},
+            {"role": "user", "content": f"Transcript:\n{transcript}"},
+        ]
+    )
+    parsed = _extract_json(content)
+    items = parsed.get("chapters", []) if isinstance(parsed, dict) else []
+    if not isinstance(items, list):
+        return []
+    result = []
+    for it in items:
+        if isinstance(it, dict):
+            title = str(it.get("title", "")).strip()
+            summary = str(it.get("summary", "")).strip()
+            if title or summary:
+                result.append({"title": title, "summary": summary})
+    return result
+
+
+_MODERATION_SYSTEM = (
+    "You are a content moderation classifier. Decide if the text contains "
+    "harassment, hate, sexual, violence, or self-harm content. Respond ONLY with "
+    'JSON {"flagged": boolean, "categories": string[], "reason": string}.'
+)
+
+
+async def moderate(text: str) -> dict:
+    """Classify ``text`` for unsafe content -> ``{flagged, categories, reason}``."""
+    content = await chat(
+        [
+            {"role": "system", "content": _MODERATION_SYSTEM},
+            {"role": "user", "content": text},
+        ]
+    )
+    parsed = _extract_json(content)
+    flagged = bool(parsed.get("flagged", False)) if isinstance(parsed, dict) else False
+    cats = parsed.get("categories", []) if isinstance(parsed, dict) else []
+    if not isinstance(cats, list):
+        cats = []
+    categories = [str(c).strip() for c in cats if str(c).strip()]
+    reason = str(parsed.get("reason", "")).strip() if isinstance(parsed, dict) else ""
+    return {"flagged": flagged, "categories": categories, "reason": reason}

@@ -134,7 +134,7 @@ parties, and prefer on-device for anything that can run locally.
 | **2 — Summaries** | End-of-call summary + action items | **Ollama** (local, OpenAI-compatible) | ✅ done |
 | **3 — Translation** | Toggle translated captions (live, via captions WS + `/translate`) | Ollama / NLLB | ✅ done |
 | **4 — On-device polish** | Background blur, noise suppression, VAD | MediaPipe, WebRTC NS | planned |
-| **5 — Intelligence** | Diarization, topic chapters, Q&A (RAG), moderation | pyannote, embeddings, Ollama | planned |
+| **5 — Intelligence** | Q&A, topic chapters, moderation done (`/ask`, `/chapters`, `/moderate`); diarization still planned | pyannote, embeddings, Ollama | 🟡 partial |
 | **6 — Hardening** | Auth on AI endpoints, rate limits, PII redaction, GPU autoscale | FastAPI middleware, infra | planned |
 
 ---

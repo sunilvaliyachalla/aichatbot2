@@ -30,4 +30,7 @@ data class CallState(
     val summarizing: Boolean = false,
     val summary: String? = null,
     val actionItems: List<String> = emptyList(),
+    // Meeting Q&A
+    val asking: Boolean = false,
+    val answer: String? = null,
 )

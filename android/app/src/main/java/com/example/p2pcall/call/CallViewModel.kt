@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.p2pcall.ai.AiCaptionClient
+import com.example.p2pcall.ai.AiQaClient
 import com.example.p2pcall.ai.AiSummaryClient
 import com.example.p2pcall.ai.AudioCaptioner
 import com.example.p2pcall.config.Config
@@ -250,6 +251,27 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissSummary() {
         update { it.copy(summary = null, actionItems = emptyList()) }
+    }
+
+    /** Ask a question grounded in the live transcript (FastAPI/Ollama /ask). */
+    fun ask(question: String) {
+        if (!Config.aiEnabled || question.isBlank() || transcript.isBlank()) return
+        val text = transcript.toString()
+        update { it.copy(asking = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val answer = withContext(Dispatchers.IO) {
+                    AiQaClient(Config.aiAskUrl).ask(text, question)
+                }
+                update { it.copy(asking = false, answer = answer) }
+            } catch (e: Exception) {
+                update { it.copy(asking = false, error = "Ask failed: ${e.message}") }
+            }
+        }
+    }
+
+    fun dismissAnswer() {
+        update { it.copy(answer = null) }
     }
 
     fun hangup() {

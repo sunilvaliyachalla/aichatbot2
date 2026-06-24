@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.config import get_settings
-from app.routers import summarize, transcribe, translate
+from app.routers import intelligence, summarize, transcribe, translate
 
 
 def create_app() -> FastAPI:
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(transcribe.router)
     app.include_router(summarize.router)
     app.include_router(translate.router)
+    app.include_router(intelligence.router)
     return app
 
 

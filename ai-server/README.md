@@ -19,6 +19,9 @@ to this service over a separate channel and receive captions/summaries back.
 | `WS` | `/ws/transcribe` | Live captions: stream raw **PCM16 @ 16 kHz** chunks, send text `flush` to get `{type:"final", text, segments}`; `lang:<code>` enables live translation (reply adds `translation` + `target_lang`), `lang:off` disables; `reset` clears, `close` ends |
 | `POST` | `/summarize` | `{ "transcript": "..." }` → `{ "summary", "action_items": [] }` (uses Ollama) |
 | `POST` | `/translate` | `{ "text": "...", "target_lang": "Spanish" }` → `{ "translated", "target_lang" }` (uses Ollama) |
+| `POST` | `/ask` | `{ "transcript", "question" }` → `{ "answer" }` — meeting Q&A grounded in the transcript |
+| `POST` | `/chapters` | `{ "transcript" }` → `{ "chapters": [{title, summary}] }` — topic chapters |
+| `POST` | `/moderate` | `{ "text" }` → `{ "flagged", "categories", "reason" }` — content moderation |
 
 ## Setup
 

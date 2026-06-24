@@ -25,6 +25,9 @@ object Config {
     /** REST URL for end-of-call summaries. */
     val aiSummaryUrl: String get() = aiServerUrl.trimEnd('/') + "/summarize"
 
+    /** REST URL for meeting Q&A. */
+    val aiAskUrl: String get() = aiServerUrl.trimEnd('/') + "/ask"
+
     /** Builds the ICE server list: STUN by default, TURN only when configured. */
     fun iceServers(): List<IceServer> {
         val servers = mutableListOf<IceServer>()

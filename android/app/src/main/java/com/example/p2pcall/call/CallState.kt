@@ -18,4 +18,12 @@ data class CallState(
     val error: String? = null,
     val micEnabled: Boolean = true,
     val cameraEnabled: Boolean = true,
+    // --- AI features ---
+    val aiAvailable: Boolean = false,
+    val captionsEnabled: Boolean = false,
+    /** Latest caption line shown as an overlay. */
+    val caption: String = "",
+    val summarizing: Boolean = false,
+    val summary: String? = null,
+    val actionItems: List<String> = emptyList(),
 )

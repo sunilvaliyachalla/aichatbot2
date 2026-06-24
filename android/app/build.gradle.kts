@@ -30,6 +30,7 @@ android {
         buildConfigField("String", "TURN_URL", "\"${cfg("TURN_URL")}\"")
         buildConfigField("String", "TURN_USERNAME", "\"${cfg("TURN_USERNAME")}\"")
         buildConfigField("String", "TURN_CREDENTIAL", "\"${cfg("TURN_CREDENTIAL")}\"")
+        buildConfigField("String", "AI_SERVER_URL", "\"${cfg("AI_SERVER_URL")}\"")
     }
 
     buildTypes {
@@ -75,6 +76,9 @@ dependencies {
 
     // Socket.IO client for the signaling layer.
     implementation("io.socket:socket.io-client:2.1.0")
+
+    // HTTP + WebSocket client for the AI side-channel (captions/summary).
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

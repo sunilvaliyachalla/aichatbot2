@@ -4,13 +4,18 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.p2pcall.ai.AiCaptionClient
+import com.example.p2pcall.ai.AiSummaryClient
+import com.example.p2pcall.ai.AudioCaptioner
 import com.example.p2pcall.config.Config
 import com.example.p2pcall.signaling.SignalingClient
 import com.example.p2pcall.webrtc.RtcClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.webrtc.EglBase
 import org.webrtc.PeerConnection
@@ -24,7 +29,7 @@ import org.webrtc.VideoTrack
  */
 class CallViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val _state = MutableStateFlow(CallState())
+    private val _state = MutableStateFlow(CallState(aiAvailable = Config.aiEnabled))
     val state: StateFlow<CallState> = _state.asStateFlow()
 
     private val _localTrack = MutableStateFlow<VideoTrack?>(null)
@@ -39,6 +44,10 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private var rtc: RtcClient? = null
     private var remotePeerId: String? = null
     private var roomId: String? = null
+
+    // AI captions/summary
+    private var captioner: AudioCaptioner? = null
+    private val transcript = StringBuilder()
 
     fun join(room: String) {
         val trimmed = room.trim()
@@ -168,12 +177,73 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         update { it.copy(cameraEnabled = enabled) }
     }
 
+    /**
+     * Toggle live AI captions. Requires RECORD_AUDIO (already granted before
+     * joining) and a configured AI server. Opt-in by design.
+     */
+    fun toggleCaptions() {
+        if (!Config.aiEnabled) return
+        val enabling = !_state.value.captionsEnabled
+        if (enabling) {
+            val client = AiCaptionClient(
+                wsUrl = Config.aiCaptionsWsUrl,
+                onCaption = { line ->
+                    transcript.append(line).append('\n')
+                    update { it.copy(caption = line) }
+                },
+                onError = { msg -> Log.w("CallViewModel", "captions: $msg") },
+            )
+            val cap = AudioCaptioner(client)
+            captioner = cap
+            try {
+                cap.start()
+                update { it.copy(captionsEnabled = true) }
+            } catch (e: SecurityException) {
+                update { it.copy(error = "Microphone permission required for captions.") }
+            }
+        } else {
+            captioner?.stop()
+            captioner = null
+            update { it.copy(captionsEnabled = false, caption = "") }
+        }
+    }
+
+    /** Summarize the accumulated transcript via the FastAPI/Ollama backend. */
+    fun requestSummary() {
+        if (!Config.aiEnabled || transcript.isBlank()) return
+        val text = transcript.toString()
+        update { it.copy(summarizing = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    AiSummaryClient(Config.aiSummaryUrl).summarize(text)
+                }
+                update {
+                    it.copy(
+                        summarizing = false,
+                        summary = result.summary,
+                        actionItems = result.actionItems,
+                    )
+                }
+            } catch (e: Exception) {
+                update { it.copy(summarizing = false, error = "Summary failed: ${e.message}") }
+            }
+        }
+    }
+
+    fun dismissSummary() {
+        update { it.copy(summary = null, actionItems = emptyList()) }
+    }
+
     fun hangup() {
         cleanup()
-        update { CallState(status = CallStatus.ENDED) }
+        update { CallState(status = CallStatus.ENDED, aiAvailable = Config.aiEnabled) }
     }
 
     private fun cleanup() {
+        captioner?.stop()
+        captioner = null
+        transcript.setLength(0)
         roomId?.let { signaling?.leaveRoom(it) }
         signaling?.disconnect()
         signaling = null

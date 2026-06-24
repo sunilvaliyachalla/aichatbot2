@@ -81,6 +81,9 @@ private fun AppRoot(vm: CallViewModel = viewModel()) {
             onToggleMic = vm::toggleMic,
             onToggleCamera = vm::toggleCamera,
             onHangup = vm::hangup,
+            onToggleCaptions = vm::toggleCaptions,
+            onSummarize = vm::requestSummary,
+            onDismissSummary = vm::dismissSummary,
         )
 
         else -> LobbyScreen(

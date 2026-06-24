@@ -16,21 +16,34 @@ import org.json.JSONObject
  */
 class AiCaptionClient(
     private val wsUrl: String,
-    private val onCaption: (String) -> Unit,
+    /** Called with the recognized text and an optional translation. */
+    private val onCaption: (text: String, translation: String?) -> Unit,
     private val onError: (String) -> Unit = {},
 ) {
     private val httpClient = OkHttpClient()
     private var webSocket: WebSocket? = null
+    @Volatile private var pendingLang: String? = null
 
     fun connect() {
         if (webSocket != null) return
         val request = Request.Builder().url(wsUrl).build()
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                // Apply any language selected before the socket was open.
+                pendingLang?.let { webSocket.send("lang:$it") }
+            }
+
             override fun onMessage(webSocket: WebSocket, text: String) {
                 runCatching {
                     val obj = JSONObject(text)
                     when (obj.optString("type")) {
-                        "final" -> obj.optString("text").takeIf { it.isNotBlank() }?.let(onCaption)
+                        "final" -> {
+                            val caption = obj.optString("text")
+                            if (caption.isNotBlank()) {
+                                val translation = obj.optString("translation").ifBlank { null }
+                                onCaption(caption, translation)
+                            }
+                        }
                         "error" -> onError(obj.optString("detail"))
                     }
                 }.onFailure { Log.e(TAG, "bad caption message", it) }
@@ -40,6 +53,12 @@ class AiCaptionClient(
                 onError(t.message ?: "captions websocket failed")
             }
         })
+    }
+
+    /** Enable live translation into [lang] (a name or code), or null to disable. */
+    fun setLanguage(lang: String?) {
+        pendingLang = lang
+        webSocket?.send("lang:${lang ?: "off"}")
     }
 
     /** Send a chunk of raw mono PCM16 @ 16 kHz. */

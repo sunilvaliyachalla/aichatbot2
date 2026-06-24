@@ -47,6 +47,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     // AI captions/summary
     private var captioner: AudioCaptioner? = null
+    private var captionClient: AiCaptionClient? = null
     private val transcript = StringBuilder()
 
     fun join(room: String) {
@@ -187,16 +188,21 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         if (enabling) {
             val client = AiCaptionClient(
                 wsUrl = Config.aiCaptionsWsUrl,
-                onCaption = { line ->
+                onCaption = { line, translation ->
                     transcript.append(line).append('\n')
-                    update { it.copy(caption = line) }
+                    update {
+                        it.copy(caption = line, captionTranslation = translation ?: "")
+                    }
                 },
                 onError = { msg -> Log.w("CallViewModel", "captions: $msg") },
             )
+            captionClient = client
             val cap = AudioCaptioner(client)
             captioner = cap
             try {
                 cap.start()
+                // Re-apply any previously chosen translation language.
+                client.setLanguage(_state.value.captionLanguage)
                 update { it.copy(captionsEnabled = true) }
             } catch (e: SecurityException) {
                 update { it.copy(error = "Microphone permission required for captions.") }
@@ -204,8 +210,19 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             captioner?.stop()
             captioner = null
-            update { it.copy(captionsEnabled = false, caption = "") }
+            captionClient = null
+            update { it.copy(captionsEnabled = false, caption = "", captionTranslation = "") }
         }
+    }
+
+    /** Cycle the live-translation target language: Off → Spanish → French → Hindi → Off. */
+    fun cycleCaptionLanguage() {
+        if (!Config.aiEnabled) return
+        val order = listOf(null, "Spanish", "French", "Hindi")
+        val current = order.indexOf(_state.value.captionLanguage)
+        val next = order[(current + 1) % order.size]
+        captionClient?.setLanguage(next)
+        update { it.copy(captionLanguage = next, captionTranslation = "") }
     }
 
     /** Summarize the accumulated transcript via the FastAPI/Ollama backend. */
@@ -243,6 +260,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private fun cleanup() {
         captioner?.stop()
         captioner = null
+        captionClient = null
         transcript.setLength(0)
         roomId?.let { signaling?.leaveRoom(it) }
         signaling?.disconnect()

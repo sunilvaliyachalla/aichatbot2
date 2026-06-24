@@ -4,7 +4,7 @@ from __future__ import annotations
 import anyio
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
-from app.services import asr
+from app.services import asr, llm
 
 router = APIRouter(tags=["transcribe"])
 
@@ -35,10 +35,14 @@ async def transcribe_ws(websocket: WebSocket) -> None:
       • client sends the text message ``"flush"`` to request a transcription of
         everything received since the last flush;
       • server replies with JSON ``{type: "final", text, segments}``;
+      • text ``"lang:<code>"`` enables live translation of captions into that
+        language (the reply then also carries ``translation`` + ``target_lang``);
+        ``"lang:off"`` (or empty) disables it;
       • text message ``"reset"`` clears the buffer; ``"close"`` ends the session.
     """
     await websocket.accept()
     buffer = bytearray()
+    target_lang: str | None = None
     try:
         while True:
             message = await websocket.receive()
@@ -47,12 +51,24 @@ async def transcribe_ws(websocket: WebSocket) -> None:
                 continue
 
             text = message.get("text")
+            if isinstance(text, str) and text.startswith("lang:"):
+                value = text[len("lang:"):].strip()
+                target_lang = None if value in ("", "off") else value
+                continue
+
             if text in ("flush", "close") and buffer:
                 audio = bytes(buffer)
                 buffer.clear()
                 try:
                     result = await anyio.to_thread.run_sync(asr.transcribe_pcm16, audio, None)
-                    await websocket.send_json({"type": "final", **result})
+                    payload = {"type": "final", **result}
+                    if target_lang and result.get("text"):
+                        try:
+                            payload["translation"] = await llm.translate(result["text"], target_lang)
+                            payload["target_lang"] = target_lang
+                        except llm.LLMError:
+                            pass  # captions still work if translation is unavailable
+                    await websocket.send_json(payload)
                 except Exception as exc:  # noqa: BLE001
                     await websocket.send_json({"type": "error", "detail": str(exc)})
             elif text == "reset":

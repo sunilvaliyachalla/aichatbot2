@@ -43,6 +43,7 @@ fun CallScreen(
     onToggleCamera: () -> Unit,
     onHangup: () -> Unit,
     onToggleCaptions: () -> Unit = {},
+    onCycleLanguage: () -> Unit = {},
     onSummarize: () -> Unit = {},
     onDismissSummary: () -> Unit = {},
 ) {
@@ -66,18 +67,25 @@ fun CallScreen(
                 )
             }
 
-            // Live caption overlay.
+            // Live caption overlay (original + optional translation).
             if (state.captionsEnabled && state.caption.isNotBlank()) {
-                Text(
-                    text = state.caption,
-                    color = Color.White,
+                Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black.copy(alpha = 0.6f))
                         .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                ) {
+                    Text(text = state.caption, color = Color.White)
+                    if (state.captionTranslation.isNotBlank()) {
+                        Text(
+                            text = state.captionTranslation,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
             }
 
             // Local preview thumbnail.
@@ -104,6 +112,13 @@ fun CallScreen(
             ) {
                 OutlinedButton(onClick = onToggleCaptions, modifier = Modifier.weight(1f)) {
                     Text(if (state.captionsEnabled) "Captions: On" else "Captions: Off")
+                }
+                OutlinedButton(
+                    onClick = onCycleLanguage,
+                    enabled = state.captionsEnabled,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Translate: ${state.captionLanguage ?: "Off"}")
                 }
                 OutlinedButton(
                     onClick = onSummarize,

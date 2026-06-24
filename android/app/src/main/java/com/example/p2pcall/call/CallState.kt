@@ -23,6 +23,10 @@ data class CallState(
     val captionsEnabled: Boolean = false,
     /** Latest caption line shown as an overlay. */
     val caption: String = "",
+    /** Target translation language label (e.g. "Spanish"), or null for off. */
+    val captionLanguage: String? = null,
+    /** Latest translated caption line, when translation is enabled. */
+    val captionTranslation: String = "",
     val summarizing: Boolean = false,
     val summary: String? = null,
     val actionItems: List<String> = emptyList(),

@@ -82,6 +82,7 @@ private fun AppRoot(vm: CallViewModel = viewModel()) {
             onToggleCamera = vm::toggleCamera,
             onHangup = vm::hangup,
             onToggleCaptions = vm::toggleCaptions,
+            onCycleLanguage = vm::cycleCaptionLanguage,
             onSummarize = vm::requestSummary,
             onDismissSummary = vm::dismissSummary,
         )

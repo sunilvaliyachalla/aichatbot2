@@ -80,3 +80,21 @@ async def summarize(transcript: str) -> dict:
         items = []
     action_items = [str(i).strip() for i in items if str(i).strip()]
     return {"summary": summary, "action_items": action_items}
+
+
+def _translate_system(target_lang: str) -> str:
+    return (
+        f"You are a translator. Translate the user's text into {target_lang}. "
+        "Respond with ONLY the translation — no quotes, no notes, no original text."
+    )
+
+
+async def translate(text: str, target_lang: str) -> str:
+    """Translate ``text`` into ``target_lang`` (a language name or code)."""
+    content = await chat(
+        [
+            {"role": "system", "content": _translate_system(target_lang)},
+            {"role": "user", "content": text},
+        ]
+    )
+    return content.strip()

@@ -132,7 +132,7 @@ parties, and prefer on-device for anything that can run locally.
 | **0 — Scaffold** | `ai-server/` FastAPI skeleton, `/health`, env config, Android HTTP/WS client + opt-in toggle | FastAPI, Android | ✅ done |
 | **1 — Captions** | Live transcription over WebSocket + on-screen captions | faster-whisper, Compose overlay | ✅ done |
 | **2 — Summaries** | End-of-call summary + action items | **Ollama** (local, OpenAI-compatible) | ✅ done |
-| **3 — Translation** | Toggle translated captions | Ollama / NLLB | planned |
+| **3 — Translation** | Toggle translated captions (live, via captions WS + `/translate`) | Ollama / NLLB | ✅ done |
 | **4 — On-device polish** | Background blur, noise suppression, VAD | MediaPipe, WebRTC NS | planned |
 | **5 — Intelligence** | Diarization, topic chapters, Q&A (RAG), moderation | pyannote, embeddings, Ollama | planned |
 | **6 — Hardening** | Auth on AI endpoints, rate limits, PII redaction, GPU autoscale | FastAPI middleware, infra | planned |

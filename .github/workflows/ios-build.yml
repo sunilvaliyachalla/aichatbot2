@@ -1,0 +1,57 @@
+name: iOS build
+
+# Compiles the SwiftUI/iOS app so the module is validated on every push/PR.
+# The Xcode project is generated from project.yml by XcodeGen (not checked in),
+# mirroring how the Android module is described by Gradle rather than committed
+# IDE state. Builds for the iOS Simulator so no code signing is required.
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project P2PCall.xcodeproj \
+            -scheme P2PCall
+
+      # Build for a generic iOS Simulator destination: compiles all Swift and
+      # links the WebRTC + Socket.IO packages without needing a signing identity.
+      - name: Build (iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project P2PCall.xcodeproj \
+            -scheme P2PCall \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

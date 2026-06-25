@@ -84,6 +84,13 @@ When `AI_SERVER_URL` is set, the call screen shows controls backed by the
 
 ## CI
 
-[`.github/workflows/ios-build.yml`](../.github/workflows/ios-build.yml) compiles
-the app on a macOS runner: it installs XcodeGen, generates the project, resolves
-the SPM packages, and runs `xcodebuild` for the iOS Simulator (no code signing).
+[`.github/workflows/ios-build.yml`](../.github/workflows/ios-build.yml) builds
+the app on a `macos-15` runner (Xcode 16): it installs XcodeGen, generates the
+project, resolves the SPM packages, and archives the app for an iOS device with
+signing disabled. The build is the compile gate, and the resulting app is
+packaged into an **unsigned `.ipa`** uploaded as the `P2PCall-unsigned-ipa`
+artifact (the iOS analogue of the Android debug-APK upload).
+
+> The IPA is **unsigned** — CI has no Apple certificate or provisioning profile.
+> Re-sign it (`codesign` / a fastlane match setup / Xcode) before installing on
+> a device, or build & run from Xcode directly during development.

@@ -10,6 +10,24 @@ import org.webrtc.PeerConnection.IceServer
 object Config {
     val signalingUrl: String = BuildConfig.SIGNALING_URL
 
+    /** Base URL of the FastAPI AI server (empty disables AI features). */
+    val aiServerUrl: String = BuildConfig.AI_SERVER_URL
+
+    val aiEnabled: Boolean get() = aiServerUrl.isNotBlank()
+
+    /** WebSocket URL for live captions, derived from [aiServerUrl]. */
+    val aiCaptionsWsUrl: String
+        get() = aiServerUrl
+            .replaceFirst("https://", "wss://")
+            .replaceFirst("http://", "ws://")
+            .trimEnd('/') + "/ws/transcribe"
+
+    /** REST URL for end-of-call summaries. */
+    val aiSummaryUrl: String get() = aiServerUrl.trimEnd('/') + "/summarize"
+
+    /** REST URL for meeting Q&A. */
+    val aiAskUrl: String get() = aiServerUrl.trimEnd('/') + "/ask"
+
     /** Builds the ICE server list: STUN by default, TURN only when configured. */
     fun iceServers(): List<IceServer> {
         val servers = mutableListOf<IceServer>()

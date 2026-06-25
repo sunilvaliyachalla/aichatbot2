@@ -8,6 +8,7 @@ clients and a minimal signaling server:
 | Signaling server | Node.js + TypeScript + Socket.IO | [`server/`](./server) |
 | Web client | React + TypeScript + Vite | [`web/`](./web) |
 | Android client | Kotlin + Jetpack Compose + WebRTC | [`android/`](./android) |
+| AI server (optional) | Python + FastAPI (+ Ollama) | [`ai-server/`](./ai-server) |
 
 **Media flows directly between peers over WebRTC.** The server is used *only* for
 signaling: room management, presence, and relaying SDP offers/answers and ICE

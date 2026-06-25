@@ -18,4 +18,19 @@ data class CallState(
     val error: String? = null,
     val micEnabled: Boolean = true,
     val cameraEnabled: Boolean = true,
+    // --- AI features ---
+    val aiAvailable: Boolean = false,
+    val captionsEnabled: Boolean = false,
+    /** Latest caption line shown as an overlay. */
+    val caption: String = "",
+    /** Target translation language label (e.g. "Spanish"), or null for off. */
+    val captionLanguage: String? = null,
+    /** Latest translated caption line, when translation is enabled. */
+    val captionTranslation: String = "",
+    val summarizing: Boolean = false,
+    val summary: String? = null,
+    val actionItems: List<String> = emptyList(),
+    // Meeting Q&A
+    val asking: Boolean = false,
+    val answer: String? = null,
 )

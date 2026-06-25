@@ -20,7 +20,7 @@ where each runs, the models/libraries to use, the data flow, and a phased plan.
 | **FastAPI server** | Your backend (CPU/GPU) | Heavy models, LLMs, cross-call analytics | Transcription (ASR), translation, summaries, diarization, moderation, RAG Q&A |
 
 On-device uses **ML Kit / MediaPipe / TFLite**. The server hosts open models
-(e.g. Whisper) and/or calls hosted LLM APIs (Claude).
+(e.g. Whisper) and/or calls hosted LLM APIs (Ollama).
 
 ---
 
@@ -31,7 +31,7 @@ A new, independent service — does **not** touch signaling or media relay.
 ```
 android app ──(audio chunks / transcript / frames)──▶  FastAPI  ──▶  AI models
      ▲                                                    │            • Whisper (ASR)
-     └──────────(captions / summary / alerts)─────────────┘            • Claude (LLM)
+     └──────────(captions / summary / alerts)─────────────┘            • Ollama (LLM)
                   REST for batch, WebSocket for streaming               • diarization, etc.
 ```
 
@@ -49,20 +49,21 @@ ai-server/
 │   │   └── moderate.py    # POST /moderate
 │   └── services/
 │       ├── asr.py         # faster-whisper wrapper
-│       ├── llm.py         # Claude API client
+│       ├── llm.py         # Ollama API client
 │       └── diarize.py     # speaker diarization
-├── requirements.txt       # fastapi, uvicorn, faster-whisper, anthropic, ...
-└── .env.example           # ANTHROPIC_API_KEY=, WHISPER_MODEL=base, ...
+├── requirements.txt       # fastapi, uvicorn, faster-whisper, httpx, ...
+└── .env.example           # OLLAMA_BASE_URL=, OLLAMA_MODEL=, WHISPER_MODEL=base, ...
 ```
 
 Transport choices:
 - **WebSocket** (`/ws/...`) for streaming/low-latency (live captions).
 - **REST** for request/response (summary at call end, translate a line).
 
-LLM features should default to the latest Claude models — e.g.
-`claude-opus-4-8` (highest quality), `claude-sonnet-4-6` (balanced), or
-`claude-haiku-4-5` (fastest/cheapest for high-volume calls). Use streaming
-responses for anything shown live.
+LLM features use a **local Ollama** server via its OpenAI-compatible API
+(`/v1/chat/completions`), so there are no proprietary keys and data stays local
+— configurable with `OLLAMA_BASE_URL` / `OLLAMA_MODEL` (e.g. `llama3.1`).
+Because the endpoint is OpenAI-compatible, swapping in a hosted gateway later is
+a config change only. Use streaming responses for anything shown live.
 
 ---
 
@@ -73,12 +74,12 @@ responses for anything shown live.
 | Facility | How | Model / lib | Latency |
 | --- | --- | --- | --- |
 | **Live transcription / captions** | Android streams 16 kHz PCM over WS; server runs streaming ASR; emits partial+final text | `faster-whisper` (or `whisper.cpp`) | ~0.5–2 s |
-| **Live translation captions** | Pipe ASR text → translate per utterance | Claude, or NLLB/Marian (offline) | +0.3–1 s |
-| **Meeting summary & action items** | Buffer transcript; at end (or every N min) summarize | Claude (`claude-sonnet-4-6`) | batch |
+| **Live translation captions** | Pipe ASR text → translate per utterance | Ollama, or NLLB/Marian (offline) | +0.3–1 s |
+| **Meeting summary & action items** | Buffer transcript; at end (or every N min) summarize | Ollama (local LLM) | batch |
 | **Speaker diarization ("who spoke")** | Segment audio by speaker; label transcript | `pyannote.audio` | batch/near-RT |
-| **Topic detection / chapters** | LLM over transcript → timestamped sections | Claude | batch |
-| **Q&A over the meeting (RAG)** | Embed transcript chunks; answer questions | embeddings + Claude | on demand |
-| **Sentiment / tone** | Classify utterances | small classifier or Claude | near-RT |
+| **Topic detection / chapters** | LLM over transcript → timestamped sections | Ollama | batch |
+| **Q&A over the meeting (RAG)** | Embed transcript chunks; answer questions | embeddings + Ollama | on demand |
+| **Sentiment / tone** | Classify utterances | small classifier or Ollama | near-RT |
 
 ### B. Audio enhancement
 
@@ -102,7 +103,7 @@ responses for anything shown live.
 
 | Facility | How | Model |
 | --- | --- | --- |
-| **Content / toxicity moderation** | Run on transcript stream; flag/alert | Claude or a moderation classifier |
+| **Content / toxicity moderation** | Run on transcript stream; flag/alert | Ollama or a moderation classifier |
 | **PII redaction in transcripts** | NER + mask before storage | spaCy / Presidio |
 | **Call analytics** (talk-time, sentiment trend) | Aggregate per call | server logic + LLM |
 
@@ -116,7 +117,7 @@ Android: AudioRecord (16kHz mono PCM)
                                    └─ faster-whisper streaming
                                         └─ {partial|final, text, ts} ─▶ Android
 Android: overlay captions on CallScreen (Compose), optional translate toggle
-At call end: POST /summarize {transcript} ─▶ Claude ─▶ summary + action items
+At call end: POST /summarize {transcript} ─▶ Ollama ─▶ summary + action items
 ```
 
 Privacy: make AI **opt-in per call**, show an "AI on" indicator to both
@@ -126,15 +127,15 @@ parties, and prefer on-device for anything that can run locally.
 
 ## 5. Phased plan
 
-| Phase | Deliverable | Components |
-| --- | --- | --- |
-| **0 — Scaffold** | `ai-server/` FastAPI skeleton, `/health`, env config, Android HTTP/WS client + opt-in toggle | FastAPI, Android |
-| **1 — Captions** | Live transcription over WebSocket + on-screen captions | faster-whisper, Compose overlay |
-| **2 — Summaries** | End-of-call summary + action items | Claude (`claude-sonnet-4-6`) |
-| **3 — Translation** | Toggle translated captions | Claude / NLLB |
-| **4 — On-device polish** | Background blur, noise suppression, VAD | MediaPipe, WebRTC NS |
-| **5 — Intelligence** | Diarization, topic chapters, Q&A (RAG), moderation | pyannote, embeddings, Claude |
-| **6 — Hardening** | Auth on AI endpoints, rate limits, PII redaction, GPU autoscale | FastAPI middleware, infra |
+| Phase | Deliverable | Components | Status |
+| --- | --- | --- | --- |
+| **0 — Scaffold** | `ai-server/` FastAPI skeleton, `/health`, env config, Android HTTP/WS client + opt-in toggle | FastAPI, Android | ✅ done |
+| **1 — Captions** | Live transcription over WebSocket + on-screen captions | faster-whisper, Compose overlay | ✅ done |
+| **2 — Summaries** | End-of-call summary + action items | **Ollama** (local, OpenAI-compatible) | ✅ done |
+| **3 — Translation** | Toggle translated captions (live, via captions WS + `/translate`) | Ollama / NLLB | ✅ done |
+| **4 — On-device polish** | Background blur, noise suppression, VAD | MediaPipe, WebRTC NS | planned |
+| **5 — Intelligence** | Q&A, topic chapters, moderation done (`/ask`, `/chapters`, `/moderate`); diarization still planned | pyannote, embeddings, Ollama | 🟡 partial |
+| **6 — Hardening** | Auth on AI endpoints, rate limits, PII redaction, GPU autoscale | FastAPI middleware, infra | planned |
 
 ---
 
@@ -142,11 +143,12 @@ parties, and prefer on-device for anything that can run locally.
 
 - **FastAPI** + **Uvicorn** (ASGI); WebSocket for streaming, REST for batch.
 - **ASR:** `faster-whisper` (CTranslate2) — runs on CPU, much faster on GPU.
-- **LLM:** Anthropic Claude via the `anthropic` Python SDK; stream live output;
-  pick model by latency/cost (`claude-haiku-4-5` for high-volume captions,
-  `claude-sonnet-4-6`/`claude-opus-4-8` for summaries/analysis).
+- **LLM:** local **Ollama** via its OpenAI-compatible API (`httpx`); pick the
+  model with `OLLAMA_MODEL` by latency/quality (small models for high-volume
+  captions/translation, larger for summaries/analysis). OpenAI-compatible, so a
+  hosted gateway can replace it via config only.
 - **Diarization:** `pyannote.audio`. **Embeddings/RAG:** a vector store +
-  Claude for answers.
+  Ollama for answers.
 - **Android:** `AudioRecord` for raw PCM, OkHttp WebSocket to FastAPI, MediaPipe
   Tasks / ML Kit / TFLite for on-device vision & audio.
 - **Ops:** API-key auth on AI endpoints, per-user rate limiting, GPU batching,

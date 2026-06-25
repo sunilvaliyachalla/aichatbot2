@@ -19,10 +19,6 @@ options:
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
-  # Pin the pbxproj format so the project opens in the runner's Xcode (15.4 on
-  # macos-14). Newer XcodeGen defaults to objectVersion 77 (Xcode 16), which
-  # Xcode 15 rejects as a "future project file format".
-  objectVersion: 56
 
 packages:
   # Maintained WebRTC binary distribution exposing the standard RTC* API

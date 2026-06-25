@@ -8,6 +8,7 @@ clients and a minimal signaling server:
 | Signaling server | Node.js + TypeScript + Socket.IO | [`server/`](./server) |
 | Web client | React + TypeScript + Vite | [`web/`](./web) |
 | Android client | Kotlin + Jetpack Compose + WebRTC | [`android/`](./android) |
+| iOS client | Swift + SwiftUI + WebRTC | [`ios/`](./ios) |
 | AI server (optional) | Python + FastAPI (+ Ollama) | [`ai-server/`](./ai-server) |
 
 **Media flows directly between peers over WebRTC.** The server is used *only* for
@@ -29,11 +30,11 @@ optional and configurable for networks where direct P2P is blocked.
         │  (Node.js + Socket.IO) │   • rooms / presence
         └───────────┬────────────┘   • offer/answer/ICE relay
             signaling │ signaling
-        ┌───────────▼─────────┐   ┌─────────────────────┐
-        │   Web client (React)│   │ Android client (KT) │
-        └───────────┬─────────┘   └──────────┬──────────┘
-                    │      WebRTC media (P2P)  │
-                    └──────────────────────────┘
+   ┌────────▼────────┐ ┌──────────▼─────────┐ ┌──────▼──────────┐
+   │ Web client (React)│ │ Android client (KT)│ │ iOS client (Swift)│
+   └────────┬────────┘ └──────────┬─────────┘ └──────┬──────────┘
+            │           WebRTC media (P2P, 1:1)       │
+            └─────────────────────────────────────────┘
                       audio/video goes directly
 ```
 
@@ -121,6 +122,18 @@ cp local.properties.example local.properties   # set sdk.dir
 # Emulator reaches your host at 10.0.2.2 (already the default SIGNALING_URL).
 ./gradlew installDebug    # or open in Android Studio and Run
 ```
+
+### 4. iOS client
+
+```bash
+cd ios
+brew install xcodegen      # one time
+xcodegen generate          # produces P2PCall.xcodeproj from project.yml
+open P2PCall.xcodeproj      # then Run on a device (camera needs real hardware)
+```
+
+The iOS Simulator reaches your host at `localhost` (the default `SIGNALING_URL`).
+See [`ios/README.md`](./ios) for configuration and details.
 
 ---
 

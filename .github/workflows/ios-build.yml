@@ -1,0 +1,97 @@
+name: iOS build
+
+# Compiles the SwiftUI/iOS app so the module is validated on every push/PR, and
+# produces an unsigned .ipa artifact (the iOS analogue of the Android debug-APK
+# upload). The Xcode project is generated from project.yml by XcodeGen (not
+# checked in), mirroring how the Android module is described by Gradle rather
+# than committed IDE state.
+#
+# A single device archive serves as both the compile gate and the IPA source. A
+# *signed* IPA needs an Apple certificate + provisioning profile, which aren't
+# available in CI without secrets, so the archive is built with signing disabled
+# and packaged into an unsigned IPA (re-sign downstream to install on a device).
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # macos-15 ships Xcode 16, which reads the project format XcodeGen 2.45
+    # emits (objectVersion 77). On older images (Xcode 15) that format is
+    # rejected as a "future project file format".
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project P2PCall.xcodeproj \
+            -scheme P2PCall
+
+      # Single build: archive for a real device (Release) with signing disabled
+      # so it runs without secrets. This compiles all Swift and links the WebRTC
+      # + Socket.IO packages (the compile gate) and produces an unsigned
+      # P2PCall.app inside the .xcarchive for packaging below.
+      - name: Archive (unsigned, iOS device)
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project P2PCall.xcodeproj \
+            -scheme P2PCall \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/P2PCall.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      # Hand-package the unsigned .app into an .ipa (Payload/ + zip). xcodebuild
+      # -exportArchive can't export without a signing identity, so we build the
+      # IPA layout manually.
+      - name: Package unsigned IPA
+        run: |
+          APP="$RUNNER_TEMP/P2PCall.xcarchive/Products/Applications/P2PCall.app"
+          test -d "$APP" || { echo "App not found at $APP"; exit 1; }
+          rm -rf "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/P2PCall-unsigned.ipa"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -qry P2PCall-unsigned.ipa Payload)
+          ls -lh "$RUNNER_TEMP/P2PCall-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P2PCall-unsigned-ipa
+          path: ${{ runner.temp }}/P2PCall-unsigned.ipa
+          if-no-files-found: error

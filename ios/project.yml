@@ -1,0 +1,99 @@
+# XcodeGen spec for the iOS P2P video call client.
+#
+# This file is the single source of truth for the Xcode project; the
+# `P2PCall.xcodeproj` is *generated* from it (and git-ignored), mirroring how
+# the Android module is described by Gradle rather than checked-in IDE state.
+#
+#   brew install xcodegen
+#   xcodegen generate
+#   open P2PCall.xcodeproj
+#
+# App configuration (signaling/ICE/AI URLs) lives in `settings.base` below and
+# is surfaced to Swift through Info.plist substitution — the iOS analogue of
+# Android's gradle.properties -> BuildConfig. Override per-machine by editing
+# these values or supplying an xcconfig.
+name: P2PCall
+
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  # Maintained WebRTC binary distribution exposing the standard RTC* API
+  # (the iOS counterpart to io.getstream:stream-webrtc-android on Android).
+  WebRTC:
+    url: https://github.com/stasel/WebRTC
+    exactVersion: 149.0.0
+  # Socket.IO client for the signaling layer (counterpart to socket.io-client).
+  SocketIO:
+    url: https://github.com/socketio/socket.io-client-swift
+    from: 16.1.0
+
+targets:
+  P2PCall:
+    type: application
+    platform: iOS
+    sources:
+      - path: P2PCall
+    dependencies:
+      - package: WebRTC
+      - package: SocketIO
+        product: SocketIO
+    info:
+      path: P2PCall/Info.plist
+      properties:
+        CFBundleDisplayName: P2P Call
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: "Camera access is required for video calls."
+        NSMicrophoneUsageDescription: "Microphone access is required for audio and live captions."
+        # Allow cleartext HTTP to local/LAN signaling + AI servers during
+        # development (mirrors the Android network_security_config). Use
+        # HTTPS/WSS in production and tighten this.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        NSAllowsLocalNetworking: true
+        # --- App configuration, substituted from build settings below ---
+        SIGNALING_URL: $(SIGNALING_URL)
+        STUN_URLS: $(STUN_URLS)
+        TURN_URL: $(TURN_URL)
+        TURN_USERNAME: $(TURN_USERNAME)
+        TURN_CREDENTIAL: $(TURN_CREDENTIAL)
+        AI_SERVER_URL: $(AI_SERVER_URL)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.p2pcall
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # ---- App configuration (the iOS analogue of gradle.properties) ----
+        # iOS Simulator reaches the host machine via `localhost` (unlike the
+        # Android emulator's 10.0.2.2). For a physical device on the same LAN,
+        # use the host IP, e.g. http://192.168.1.20:4000.
+        SIGNALING_URL: http://localhost:4000
+        STUN_URLS: stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+        # Optional TURN. Leave blank to disable.
+        TURN_URL: ""
+        TURN_USERNAME: ""
+        TURN_CREDENTIAL: ""
+        # AI side-channel server (FastAPI). ws:// for live captions is derived
+        # from this automatically. Leave blank to hide AI features in the UI.
+        AI_SERVER_URL: http://localhost:8000
+
+schemes:
+  P2PCall:
+    build:
+      targets:
+        P2PCall: all
+    run:
+      config: Debug
+    archive:
+      config: Release

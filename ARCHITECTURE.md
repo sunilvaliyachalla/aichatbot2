@@ -15,44 +15,51 @@ call system: its components, layers, data flow, and the signaling protocol.
                 ┌─────────────────────────────┐
                 │      Signaling server        │   Node.js + Socket.IO
                 │   (relay-only, no media)     │   • rooms / presence
-                └───────┬──────────────┬───────┘   • SDP & ICE relay
-            signaling   │              │   signaling
-        ┌───────────────▼───┐    ┌─────▼───────────────┐
-        │   Web client      │    │   Android client    │
-        │ React + TS + Vite │    │ Kotlin + Compose    │
-        └───────────────┬───┘    └─────┬───────────────┘
-                        │   WebRTC      │
-                        └───────────────┘
+                └──────┬───────────┬───────────┬──────┘   • SDP & ICE relay
+            signaling  │           │           │  signaling
+        ┌──────────────▼─┐ ┌───────▼────────┐ ┌▼─────────────────┐
+        │   Web client   │ │ Android client │ │   iOS client     │
+        │ React + TS+Vite│ │ Kotlin+Compose │ │ Swift + SwiftUI  │
+        └──────────────┬─┘ └───────┬────────┘ └┬─────────────────┘
+                       │     WebRTC │           │
+                       └────────────┴───────────┘
                   direct P2P media (audio/video)
                   STUN for NAT traversal; TURN optional
 ```
 
-Three deployable components:
+Deployable components:
 
 | Component | Stack | Responsibility |
 | --- | --- | --- |
 | `server/` | Node.js + TypeScript + Socket.IO | Signaling only: rooms, presence, relay |
 | `web/` | React + TypeScript + Vite | Browser client |
-| `android/` | Kotlin + Jetpack Compose + WebRTC | Native mobile client |
+| `android/` | Kotlin + Jetpack Compose + WebRTC | Native Android client |
+| `ios/` | Swift + SwiftUI + WebRTC | Native iOS client |
+| `ai-server/` | Python + FastAPI (+ Ollama) | Optional AI side-channel (captions, translate, summary, Q&A) |
 
 ---
 
 ## 2. Layered design (per client)
 
-Both clients use the same four-layer separation:
+All three clients use the same four-layer separation:
 
-| Layer | Web (`web/src`) | Android (`android/.../p2pcall`) | Responsibility |
-| --- | --- | --- | --- |
-| **UI** | `components/*`, `App.tsx` | `ui/*` (Compose) | Render state, capture user intent |
-| **Session/state** | `hooks/useCall.ts` | `call/CallViewModel.kt` | Orchestrate a call, hold call state |
-| **Signaling** | `signaling/SignalingClient.ts` | `signaling/SignalingClient.kt` | Socket.IO transport, lifecycle events |
-| **WebRTC** | `webrtc/PeerConnection.ts` | `webrtc/RtcClient.kt` | `RTCPeerConnection`, tracks, ICE, cleanup |
+| Layer | Web (`web/src`) | Android (`android/.../p2pcall`) | iOS (`ios/P2PCall`) | Responsibility |
+| --- | --- | --- | --- | --- |
+| **UI** | `components/*`, `App.tsx` | `ui/*` (Compose) | `UI/*` (SwiftUI) | Render state, capture user intent |
+| **Session/state** | `hooks/useCall.ts` | `call/CallViewModel.kt` | `Call/CallViewModel.swift` | Orchestrate a call, hold call state |
+| **Signaling** | `signaling/SignalingClient.ts` | `signaling/SignalingClient.kt` | `Signaling/SignalingClient.swift` | Socket.IO transport, lifecycle events |
+| **WebRTC** | `webrtc/PeerConnection.ts` | `webrtc/RtcClient.kt` | `WebRTC/RtcClient.swift` | `RTCPeerConnection`, tracks, ICE, cleanup |
+
+The iOS client renders video by bridging `RTCMTLVideoView` (Metal) into SwiftUI
+via `UI/RTCVideoView.swift`, the counterpart to Android's `SurfaceViewRenderer`
+bridge.
 
 Cross-cutting:
 
-- **Config** — `web/src/config.ts` (+ pure `lib/iceConfig.ts`) and
-  `android/.../config/Config.kt`. All signaling URLs and ICE servers come from
-  environment variables / Gradle properties.
+- **Config** — `web/src/config.ts` (+ pure `lib/iceConfig.ts`),
+  `android/.../config/Config.kt`, and `ios/.../Config/Config.swift`. All
+  signaling URLs and ICE servers come from environment variables / Gradle
+  properties (Android) / Info.plist build settings (iOS).
 - **Protocol helpers** — `web/src/lib/protocol.ts` holds the pure,
   unit-tested negotiation/signal-construction logic shared by the layers.
 
@@ -127,9 +134,10 @@ B leaves / disconnects ── peer-left{B} ─▶ A  → A tears down peer, wait
 Reconnect: the Socket.IO client auto-reconnects; on `reconnect` the client
 re-joins the room and rebuilds the `RTCPeerConnection`.
 
-Cleanup is centralized (`useCall.cleanup` / `CallViewModel.cleanup` +
-`onCleared`): stop tracks, close the peer connection, leave the room, and
-disconnect the socket. The WebRTC layer also releases senders/receivers.
+Cleanup is centralized (`useCall.cleanup` / Android `CallViewModel.cleanup` +
+`onCleared` / iOS `CallViewModel.cleanup` + `deinit`): stop tracks, close the
+peer connection, leave the room, and disconnect the socket. The WebRTC layer
+also releases senders/receivers.
 
 ---
 
@@ -165,5 +173,8 @@ shaped for growth:
 - **Screen share** — add a display track via `getDisplayMedia` / Android
   screen-capture and renegotiate.
 - **Chat / data** — add an `RTCDataChannel` or a `chat` signaling event.
-- **AI features** — see [`AI_ROADMAP.md`](./AI_ROADMAP.md) for a Python
-  FastAPI + Android plan (transcription, translation, summarization, etc.).
+- **AI features** — an optional Python FastAPI (+ Ollama) side-channel
+  (`ai-server/`) provides live captions, translation, summaries, and grounded
+  Q&A. Both the Android and iOS clients integrate it via `ai/*` / `AI/*`
+  (opt-in; hidden when no AI server is configured). See
+  [`AI_ROADMAP.md`](./AI_ROADMAP.md) for the broader plan.

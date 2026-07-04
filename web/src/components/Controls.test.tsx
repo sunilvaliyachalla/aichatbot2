@@ -39,4 +39,50 @@ describe("<Controls /> (functional)", () => {
     expect(props.onToggleCamera).toHaveBeenCalledOnce();
     expect(props.onHangup).toHaveBeenCalledOnce();
   });
+
+  it("hides AI controls when AI is unavailable", () => {
+    setup(); // aiAvailable defaults to false
+    expect(screen.queryByRole("button", { name: /captions/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /summary/i })).toBeNull();
+  });
+
+  it("shows AI controls and disables language until captions are on", () => {
+    setup({ aiAvailable: true, captionsEnabled: false });
+    expect(screen.getByRole("button", { name: /captions/i })).toBeInTheDocument();
+    expect(screen.getByTitle(/cycle live-translation language/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /summary/i })).toBeEnabled();
+  });
+
+  it("invokes AI handlers and reflects caption/summarizing state", async () => {
+    const user = userEvent.setup();
+    const onToggleCaptions = vi.fn();
+    const onCycleLanguage = vi.fn();
+    const onSummarize = vi.fn();
+    setup({
+      aiAvailable: true,
+      captionsEnabled: true,
+      captionLanguage: "Spanish",
+      onToggleCaptions,
+      onCycleLanguage,
+      onSummarize,
+    });
+
+    // Language button shows the current language and is enabled now.
+    const lang = screen.getByRole("button", { name: /spanish/i });
+    expect(lang).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /captions on/i }));
+    await user.click(lang);
+    await user.click(screen.getByRole("button", { name: /summary/i }));
+
+    expect(onToggleCaptions).toHaveBeenCalledOnce();
+    expect(onCycleLanguage).toHaveBeenCalledOnce();
+    expect(onSummarize).toHaveBeenCalledOnce();
+  });
+
+  it("shows a busy label and disables Summary while summarizing", () => {
+    setup({ aiAvailable: true, summarizing: true });
+    const btn = screen.getByRole("button", { name: /summarizing/i });
+    expect(btn).toBeDisabled();
+  });
 });

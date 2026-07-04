@@ -62,6 +62,10 @@ Cross-cutting:
   properties (Android) / Info.plist build settings (iOS).
 - **Protocol helpers** — `web/src/lib/protocol.ts` holds the pure,
   unit-tested negotiation/signal-construction logic shared by the layers.
+- **AI clients** (optional) — `web/src/ai/*`, `android/.../ai/*`,
+  `ios/.../AI/*` talk to the FastAPI `ai-server/` for captions/summary/Q&A.
+  Independent of the call layers and hidden unless an AI server is configured
+  (see §9).
 
 This separation means, e.g., the signaling transport can change (Socket.IO →
 raw WebSocket) without touching the WebRTC layer, and the WebRTC layer can be
@@ -155,11 +159,18 @@ also releases senders/receivers.
 
 - **Server:** unit (`RoomRegistry`, validation) + **functional integration**
   using real Socket.IO clients against an ephemeral-port server.
-- **Web:** unit (pure `lib/` logic) + **functional** React component/app-flow
-  tests (JSDOM, mocked media/socket).
+- **Web:** unit (pure `lib/` logic, `ai/*` clients, PCM downsampling) +
+  **functional** React component/app-flow tests (JSDOM, mocked media/socket) +
+  **E2E** (Playwright) that drives a real Chromium with fake camera/mic — a
+  two-peer P2P call actually connects, and the AI caption/summary flow is
+  exercised against a mocked ai-server (WebSocket + REST).
+- **ai-server:** `pytest` with ASR (Whisper) and the LLM (Ollama) mocked, so no
+  model download or GPU is needed in CI.
 
-Pure logic is extracted into framework-free modules so the most important
-behavior is tested without browsers or devices.
+CI (`.github/workflows/tests.yml`) runs the server, web (typecheck + unit),
+web-e2e (Playwright), and ai-server suites. Pure logic is extracted into
+framework-free modules so the most important behavior is tested without browsers
+or devices.
 
 ---
 
@@ -175,6 +186,46 @@ shaped for growth:
 - **Chat / data** — add an `RTCDataChannel` or a `chat` signaling event.
 - **AI features** — an optional Python FastAPI (+ Ollama) side-channel
   (`ai-server/`) provides live captions, translation, summaries, and grounded
-  Q&A. Both the Android and iOS clients integrate it via `ai/*` / `AI/*`
-  (opt-in; hidden when no AI server is configured). See
+  Q&A. The **web, Android, and iOS** clients integrate it via `ai/*` / `AI/*`
+  (opt-in; hidden when no AI server is configured). See §9 and
   [`AI_ROADMAP.md`](./AI_ROADMAP.md) for the broader plan.
+
+---
+
+## 9. AI side-channel (optional)
+
+A separate FastAPI service (`ai-server/`) adds meeting intelligence **without
+touching signaling or WebRTC media** — clients send audio/transcripts to it over
+their own channel and receive captions/summaries back.
+
+```
+ client mic ──PCM16 16kHz──▶  WS /ws/transcribe ──▶ faster-whisper (ASR)
+ transcript ──JSON──────────▶ POST /summarize|/ask|/translate ──▶ Ollama (LLM)
+```
+
+| Endpoint | Purpose |
+| --- | --- |
+| `WS /ws/transcribe` | Live captions: stream PCM16, `flush` → `{type:"final", text, translation?}` |
+| `POST /summarize` | Transcript → `{ summary, action_items[] }` |
+| `POST /ask` | Transcript + question → `{ answer }` |
+| `POST /translate` | Text + target language → `{ translated }` |
+
+Client integration (per platform):
+
+- **UI** — caption overlay + Summary/Ask panels (`web/src/components/VideoCall.tsx`,
+  Android `ui/CallScreen.kt`).
+- **Clients** — `web/src/ai/{CaptionClient,AudioCaptioner,AiClient}.ts` mirror
+  Android's `ai/*`. The browser captures mic audio via the Web Audio API and
+  downsamples to 16 kHz PCM16.
+- **Config** — `VITE_AI_SERVER_URL` (web) / `AI_SERVER_URL` (Android); blank
+  hides the features.
+
+**HTTPS / mixed-content:** the web app runs over HTTPS for LAN phone testing, so
+it cannot call an `http://` ai-server directly. The Vite dev server **proxies**
+`/ws/transcribe`, `/summarize`, `/ask`, `/translate` to the ai-server, keeping
+all requests same-origin and secure. Signaling uses the same proxy pattern.
+
+**Caption quality:** each flush is a short, independent chunk, so the ASR uses
+`vad_filter` (drops silence/noise to avoid hallucinated text),
+`condition_on_previous_text=False`, and a pinned language. The `small` Whisper
+model is the default accuracy/latency sweet spot on CPU (`base` is lighter).

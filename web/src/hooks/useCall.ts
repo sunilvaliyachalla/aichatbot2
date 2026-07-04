@@ -3,7 +3,13 @@ import { config } from "../config";
 import { SignalingClient } from "../signaling/SignalingClient";
 import { PeerConnection } from "../webrtc/PeerConnection";
 import { shouldInitiate } from "../lib/protocol";
+import { CaptionClient } from "../ai/CaptionClient";
+import { AudioCaptioner } from "../ai/AudioCaptioner";
+import { summarize as summarizeApi, ask as askApi } from "../ai/AiClient";
 import type { CallState, SignalData } from "../types";
+
+/** Live-translation targets cycled by the language button (null = off). */
+const CAPTION_LANGUAGES: (string | null)[] = [null, "Spanish", "French", "Hindi"];
 
 const INITIAL_STATE: CallState = {
   status: "idle",
@@ -11,6 +17,16 @@ const INITIAL_STATE: CallState = {
   error: null,
   micEnabled: true,
   cameraEnabled: true,
+  aiAvailable: config.ai.enabled,
+  captionsEnabled: false,
+  caption: "",
+  captionTranslation: "",
+  captionLanguage: null,
+  summarizing: false,
+  summary: null,
+  actionItems: [],
+  asking: false,
+  answer: null,
 };
 
 /**
@@ -24,12 +40,21 @@ export function useCall() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
 
+  // Mirror of the latest state so event/interval callbacks avoid stale closures.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   // Refs hold the live instances so handlers always see current values.
   const signalingRef = useRef<SignalingClient | null>(null);
   const peerRef = useRef<PeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remotePeerIdRef = useRef<string | null>(null);
   const isInitiatorRef = useRef(false);
+
+  // AI captions/summary
+  const captionerRef = useRef<AudioCaptioner | null>(null);
+  const captionClientRef = useRef<CaptionClient | null>(null);
+  const transcriptRef = useRef<string[]>([]);
 
   const patch = useCallback((p: Partial<CallState>) => {
     setState((prev) => ({ ...prev, ...p }));
@@ -67,7 +92,14 @@ export function useCall() {
     if (localStreamRef.current) return localStreamRef.current;
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      // 360p @ 24fps keeps encode/decode light on phones and modest Wi-Fi,
+      // which is the usual cause of lag on a 1:1 call. Bump these for desktops
+      // on a strong network. Outbound bitrate is also capped in PeerConnection.
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 360 },
+        frameRate: { ideal: 24, max: 30 },
+      },
     });
     localStreamRef.current = stream;
     setLocalStream(stream);
@@ -176,8 +208,119 @@ export function useCall() {
     patch({ cameraEnabled: track.enabled });
   }, [patch]);
 
-  /** Centralized teardown: peer connection, tracks, and socket. */
+  /** Stop live captions and release the audio tap. Safe to call when off. */
+  const stopCaptions = useCallback(() => {
+    captionerRef.current?.stop();
+    captionerRef.current = null;
+    captionClientRef.current = null;
+  }, []);
+
+  /**
+   * Toggle live AI captions. Taps the existing mic stream, streams PCM to the
+   * ai-server, and accumulates a transcript for summary/Q&A. Opt-in by design.
+   */
+  const toggleCaptions = useCallback(async () => {
+    if (!config.ai.enabled) return;
+    if (captionerRef.current) {
+      stopCaptions();
+      patch({ captionsEnabled: false, caption: "", captionTranslation: "" });
+      return;
+    }
+    const stream = localStreamRef.current;
+    if (!stream) return;
+
+    const client = new CaptionClient(
+      config.ai.captionsWsUrl,
+      (line, translation) => {
+        transcriptRef.current.push(line);
+        patch({ caption: line, captionTranslation: translation ?? "" });
+      },
+      (msg) => console.warn("captions:", msg)
+    );
+    captionClientRef.current = client;
+    const captioner = new AudioCaptioner(stream, client);
+    captionerRef.current = captioner;
+
+    try {
+      await captioner.start();
+      client.setLanguage(stateRef.current.captionLanguage); // re-apply chosen language
+      patch({ captionsEnabled: true });
+    } catch (err) {
+      stopCaptions();
+      patch({
+        error: err instanceof Error ? err.message : "Could not start captions.",
+      });
+    }
+  }, [patch, stopCaptions]);
+
+  /** Cycle live-translation target: Off → Spanish → French → Hindi → Off. */
+  const cycleCaptionLanguage = useCallback(() => {
+    if (!config.ai.enabled) return;
+    const current = CAPTION_LANGUAGES.indexOf(stateRef.current.captionLanguage);
+    const next = CAPTION_LANGUAGES[(current + 1) % CAPTION_LANGUAGES.length];
+    captionClientRef.current?.setLanguage(next);
+    patch({ captionLanguage: next, captionTranslation: "" });
+  }, [patch]);
+
+  /** Summarize the accumulated transcript via the ai-server (Ollama). */
+  const requestSummary = useCallback(async () => {
+    if (!config.ai.enabled) return;
+    const transcript = transcriptRef.current.join("\n");
+    if (!transcript.trim()) {
+      patch({ error: "Turn on captions and speak first — nothing to summarize yet." });
+      return;
+    }
+    patch({ summarizing: true, error: null });
+    try {
+      const result = await summarizeApi(config.ai.summaryUrl, transcript);
+      patch({
+        summarizing: false,
+        summary: result.summary,
+        actionItems: result.actionItems,
+      });
+    } catch (err) {
+      patch({
+        summarizing: false,
+        error: `Summary failed: ${err instanceof Error ? err.message : err}`,
+      });
+    }
+  }, [patch]);
+
+  const dismissSummary = useCallback(
+    () => patch({ summary: null, actionItems: [] }),
+    [patch]
+  );
+
+  /** Ask a question grounded in the live transcript (ai-server /ask). */
+  const askQuestion = useCallback(
+    async (question: string) => {
+      if (!config.ai.enabled || !question.trim()) return;
+      const transcript = transcriptRef.current.join("\n");
+      if (!transcript.trim()) {
+        patch({ error: "No conversation captured yet — turn on captions first." });
+        return;
+      }
+      patch({ asking: true, error: null });
+      try {
+        const answer = await askApi(config.ai.askUrl, transcript, question);
+        patch({ asking: false, answer });
+      } catch (err) {
+        patch({
+          asking: false,
+          error: `Ask failed: ${err instanceof Error ? err.message : err}`,
+        });
+      }
+    },
+    [patch]
+  );
+
+  const dismissAnswer = useCallback(() => patch({ answer: null }), [patch]);
+
+  /** Centralized teardown: peer connection, tracks, socket, and captions. */
   const cleanup = useCallback(() => {
+    stopCaptions();
+    transcriptRef.current = [];
+
     peerRef.current?.close();
     peerRef.current = null;
 
@@ -191,7 +334,7 @@ export function useCall() {
 
     setLocalStream(null);
     setRemoteStream(null);
-  }, [state.roomId]);
+  }, [state.roomId, stopCaptions]);
 
   const hangup = useCallback(() => {
     cleanup();
@@ -209,5 +352,12 @@ export function useCall() {
     hangup,
     toggleMic,
     toggleCamera,
+    // AI features (no-ops unless the ai-server is configured).
+    toggleCaptions,
+    cycleCaptionLanguage,
+    requestSummary,
+    dismissSummary,
+    ask: askQuestion,
+    dismissAnswer,
   };
 }

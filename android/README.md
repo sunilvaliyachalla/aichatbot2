@@ -25,6 +25,13 @@ Native 1:1 WebRTC video calling. Mirrors the web client's architecture:
    - Emulator → host: `SIGNALING_URL=http://10.0.2.2:4000` (default).
    - Physical device on LAN: `SIGNALING_URL=http://<host-ip>:4000`.
 
+   You can also change the server **at runtime**: the lobby screen has a
+   **Server URL** field (pre-filled with the build default). Type any private
+   IP / LAN host / URL — e.g. `http://192.168.1.20:4000` — and it is used and
+   persisted for future launches, so you can repoint the app without
+   rebuilding. Cleartext HTTP to LAN IPs is already permitted for development
+   (see `res/xml/network_security_config.xml`).
+
 ## Run
 
 ```bash

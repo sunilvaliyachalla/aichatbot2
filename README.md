@@ -149,9 +149,10 @@ See [`ios/README.md`](./ios) for configuration and details.
 ### Web — `web/.env`
 | Var | Default | Notes |
 | --- | --- | --- |
-| `VITE_SIGNALING_URL` | `http://localhost:4000` | Signaling server URL. |
+| `VITE_SIGNALING_URL` | _(blank → page origin via proxy)_ | Signaling server URL. Blank uses the Vite Socket.IO proxy (needed for HTTPS phone testing). |
 | `VITE_STUN_URLS` | Google STUN | Comma-separated STUN URLs. |
 | `VITE_TURN_URL` / `VITE_TURN_USERNAME` / `VITE_TURN_CREDENTIAL` | _(empty)_ | Optional TURN; all three required to enable. |
+| `VITE_AI_SERVER_URL` | _(empty → AI hidden)_ | `proxy` = use the Vite AI proxy (captions/summary/Q&A); or a full ai-server URL. |
 
 ### Android — `android/gradle.properties` (override in `local.properties`)
 | Var | Default | Notes |
@@ -192,11 +193,19 @@ See [`ios/README.md`](./ios) for configuration and details.
 # Signaling server: unit (rooms) + functional (real Socket.IO clients)
 cd server && npm install && npm test
 
-# Web: unit (ice/protocol) + functional (React components & App flow)
+# Web: unit (ice/protocol/AI clients) + functional (React components & App flow)
 cd web && npm install && npm test
+
+# Web E2E: real Chromium + fake camera/mic; two-peer P2P call + AI flow (mocked
+# ai-server). Starts the signaling + web servers itself.
+cd web && npx playwright install chromium && npm run e2e
+
+# AI server: pytest with Whisper/Ollama mocked (no model download)
+cd ai-server && pip install -r requirements-dev.txt && pytest -q
 ```
 
-Both suites are pure Node/JSDOM and need no devices or a running server.
+The unit/functional suites are pure Node/JSDOM and need no devices or a running
+server. All of the above run in CI (`.github/workflows/tests.yml`).
 
 ---
 

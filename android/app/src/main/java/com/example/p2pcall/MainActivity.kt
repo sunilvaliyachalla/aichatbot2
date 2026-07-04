@@ -53,7 +53,7 @@ private fun AppRoot(vm: CallViewModel = viewModel()) {
     val remoteTrack by vm.remoteTrack.collectAsState()
 
     var permissionsGranted by remember { mutableStateOf(false) }
-    var pendingRoom by remember { mutableStateOf<String?>(null) }
+    var pendingJoin by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -61,8 +61,8 @@ private fun AppRoot(vm: CallViewModel = viewModel()) {
         val granted = result[Manifest.permission.CAMERA] == true &&
             result[Manifest.permission.RECORD_AUDIO] == true
         permissionsGranted = granted
-        if (granted) pendingRoom?.let { vm.join(it) }
-        pendingRoom = null
+        if (granted) pendingJoin?.let { (room, url) -> vm.join(room, url) }
+        pendingJoin = null
     }
 
     val inCall = state.status in setOf(
@@ -91,11 +91,12 @@ private fun AppRoot(vm: CallViewModel = viewModel()) {
 
         else -> LobbyScreen(
             error = state.error,
-            onJoin = { room ->
+            initialServerUrl = vm.serverUrl,
+            onJoin = { room, serverUrl ->
                 if (permissionsGranted) {
-                    vm.join(room)
+                    vm.join(room, serverUrl)
                 } else {
-                    pendingRoom = room
+                    pendingJoin = room to serverUrl
                     permissionLauncher.launch(
                         arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
                     )

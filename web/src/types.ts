@@ -44,4 +44,19 @@ export interface CallState {
   error: string | null;
   micEnabled: boolean;
   cameraEnabled: boolean;
+  // --- AI features (present only when the ai-server is configured) ---
+  /** Whether AI features are available (VITE_AI_SERVER_URL set). */
+  aiAvailable: boolean;
+  captionsEnabled: boolean;
+  /** Latest caption line shown as an overlay. */
+  caption: string;
+  /** Latest translated caption line, when translation is enabled. */
+  captionTranslation: string;
+  /** Target translation language label (e.g. "Spanish"), or null for off. */
+  captionLanguage: string | null;
+  summarizing: boolean;
+  summary: string | null;
+  actionItems: string[];
+  asking: boolean;
+  answer: string | null;
 }

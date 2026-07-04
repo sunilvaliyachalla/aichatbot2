@@ -9,6 +9,7 @@ import com.example.p2pcall.ai.AiQaClient
 import com.example.p2pcall.ai.AiSummaryClient
 import com.example.p2pcall.ai.AudioCaptioner
 import com.example.p2pcall.config.Config
+import com.example.p2pcall.config.Prefs
 import com.example.p2pcall.signaling.SignalingClient
 import com.example.p2pcall.webrtc.RtcClient
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,11 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     val eglBase: EglBase = EglBase.create()
 
+    private val prefs = Prefs(app)
+
+    /** Current signaling server URL (persisted override or build-time default). */
+    val serverUrl: String get() = prefs.signalingUrl
+
     private var signaling: SignalingClient? = null
     private var rtc: RtcClient? = null
     private var remotePeerId: String? = null
@@ -51,12 +57,27 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
     private var captionClient: AiCaptionClient? = null
     private val transcript = StringBuilder()
 
-    fun join(room: String) {
+    /**
+     * Join a room. [serverUrl] overrides the signaling server for this and
+     * future sessions (persisted); pass blank to keep the current one. This
+     * lets the lobby screen point the app at any private IP / LAN host / URL
+     * without rebuilding.
+     */
+    fun join(room: String, serverUrl: String = "") {
         val trimmed = room.trim()
         if (trimmed.isEmpty()) {
             update { it.copy(status = CallStatus.ERROR, error = "Please enter a room ID.") }
             return
         }
+
+        val url = serverUrl.trim().ifEmpty { prefs.signalingUrl }
+        if (url.isEmpty()) {
+            update { it.copy(status = CallStatus.ERROR, error = "Please enter a server URL.") }
+            return
+        }
+        // Persist so the chosen server sticks across restarts.
+        prefs.signalingUrl = url
+
         roomId = trimmed
         update { it.copy(status = CallStatus.CONNECTING, roomId = trimmed, error = null) }
 
@@ -70,7 +91,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         _localTrack.value = client.localVideoTrack
         rtc = client
 
-        val signalingClient = SignalingClient(Config.signalingUrl, signalingListener)
+        val signalingClient = SignalingClient(url, signalingListener)
         signaling = signalingClient
         signalingClient.connect()
     }

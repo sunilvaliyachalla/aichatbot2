@@ -22,15 +22,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kotlin.random.Random
 
 @Composable
 fun LobbyScreen(
     error: String?,
-    onJoin: (String) -> Unit,
+    /** Current signaling server URL (persisted override or build default). */
+    initialServerUrl: String,
+    onJoin: (room: String, serverUrl: String) -> Unit,
 ) {
     var roomId by remember { mutableStateOf("") }
+    var serverUrl by remember { mutableStateOf(initialServerUrl) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -44,6 +48,22 @@ fun LobbyScreen(
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(24.dp))
+
+        // Runtime override for the signaling server so the app can point at any
+        // private IP / LAN host / URL without rebuilding. Persisted on join.
+        OutlinedTextField(
+            value = serverUrl,
+            onValueChange = { serverUrl = it },
+            label = { Text("Server URL (IP / host)") },
+            placeholder = { Text("http://192.168.1.20:4000") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
 
         OutlinedTextField(
             value = roomId,
@@ -65,7 +85,7 @@ fun LobbyScreen(
             ) { Text("Random ID") }
 
             Button(
-                onClick = { onJoin(roomId) },
+                onClick = { onJoin(roomId, serverUrl) },
                 modifier = Modifier.weight(1f),
             ) { Text("Join / Create") }
         }

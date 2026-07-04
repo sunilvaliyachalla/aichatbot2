@@ -41,6 +41,41 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  web-e2e:
+    # Playwright end-to-end: drives Chromium with fake camera/mic and runs a
+    # real two-peer WebRTC call through the signaling server. The webServer
+    # config in playwright.config.ts starts both the signaling + web servers.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # The signaling server is launched by Playwright's webServer, so its deps
+      # must be installed too.
+      - name: Install web deps
+        run: npm ci
+      - name: Install signaling-server deps
+        working-directory: server
+        run: npm ci
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E
+        run: npm run e2e
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
   ai-server:
     runs-on: ubuntu-latest
     defaults:

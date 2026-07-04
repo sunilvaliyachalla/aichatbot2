@@ -72,7 +72,28 @@ export class PeerConnection {
   /** Attach local tracks. Triggers negotiationneeded for the initiator. */
   addLocalStream(stream: MediaStream): void {
     for (const track of stream.getTracks()) {
-      this.pc.addTrack(track, stream);
+      const sender = this.pc.addTrack(track, stream);
+      if (track.kind === "video") void this.applyVideoSendConstraints(sender);
+    }
+  }
+
+  /**
+   * Cap the outbound video bitrate and prefer a smooth framerate over
+   * resolution. Uncapped WebRTC can push several Mbps, which stutters on
+   * phones / shared Wi-Fi; ~0.8 Mbps at 360p stays fluid.
+   */
+  private async applyVideoSendConstraints(sender: RTCRtpSender): Promise<void> {
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      params.encodings[0].maxBitrate = 800_000; // ~0.8 Mbps
+      params.encodings[0].maxFramerate = 30;
+      params.degradationPreference = "balanced";
+      await sender.setParameters(params);
+    } catch (err) {
+      console.warn("applyVideoSendConstraints failed", err);
     }
   }
 

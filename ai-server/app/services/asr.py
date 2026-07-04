@@ -14,6 +14,20 @@ from app.config import get_settings
 # Cached model instance (lazy). Loading is expensive, so do it once.
 _model: Any = None
 
+# Decoding options shared by both transcribe paths. These matter a lot for the
+# live-caption case, where each flush is a short, independent ~3 s chunk:
+#   • vad_filter drops non-speech so silence/noise is not "transcribed" into
+#     hallucinated phrases (Whisper's classic "Thank you." on silence);
+#   • condition_on_previous_text=False stops hallucinations carrying across the
+#     independent chunks;
+#   • a small beam search improves accuracy over greedy decoding.
+_DECODE_OPTS: dict[str, Any] = {
+    "vad_filter": True,
+    "vad_parameters": {"min_silence_duration_ms": 300},
+    "condition_on_previous_text": False,
+    "beam_size": 5,
+}
+
 
 def get_model() -> Any:
     """Load (once) and return the faster-whisper model."""
@@ -52,7 +66,7 @@ def transcribe(audio: bytes, language: Optional[str] = None) -> dict:
     s = get_settings()
     lang = language or s.default_language or None
     model = get_model()
-    segments_iter, info = model.transcribe(io.BytesIO(audio), language=lang)
+    segments_iter, info = model.transcribe(io.BytesIO(audio), language=lang, **_DECODE_OPTS)
     return _format(segments_iter, info, lang)
 
 
@@ -69,5 +83,5 @@ def transcribe_pcm16(
     # PCM16 -> float32 normalized to [-1, 1].
     audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
     model = get_model()
-    segments_iter, info = model.transcribe(audio, language=lang)
+    segments_iter, info = model.transcribe(audio, language=lang, **_DECODE_OPTS)
     return _format(segments_iter, info, lang)
